@@ -160,6 +160,7 @@ echo "/dev/mmcblk0p14\t/boot\text2\tdefaults\t0 2" >> ${CHROOT}/etc/fstab
 # copy gadget-tool templates and script
 cp -a configs/templates ${CHROOT}/etc/gt
 cp scripts/setup_ncm_gadget.sh ${CHROOT}/usr/local/bin
+cp scripts/reboot-fastboot.sh ${CHROOT}/usr/local/bin
 
 # === device-specific: copy prebuilt kernel modules + WiFi firmware ===
 PREBUILT=prebuilt/${DEVICE}
