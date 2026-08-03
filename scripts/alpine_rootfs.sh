@@ -61,7 +61,7 @@ rm /etc/fstab
 "
 
 # extract NetworkManager from previous alpine version (v3.20)
-scripts/extract_networkmanager.sh
+sh scripts/extract_networkmanager.sh
 
 # setup alpine
 chroot ${CHROOT} ash -l -c "
