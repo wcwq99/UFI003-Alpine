@@ -1,0 +1,16 @@
+*.raw
+*.bin
+*.zip
+*.mbn
+*.tgz
+build
+dist
+files
+mnt
+rootfs
+apk.static
+
+# prebuilt device firmware MUST be committed for CI to build
+!prebuilt/
+!prebuilt/**
+
