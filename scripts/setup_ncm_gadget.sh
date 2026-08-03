@@ -73,11 +73,11 @@ echo "0x01"   > "${DIR}/bDeviceProtocol"
 echo "0x02"   > "${DIR}/bDeviceSubClass"
 echo "0xef"   > "${DIR}/bDeviceClass"
 
-# activate both functions
-ln -s "${DIR}/functions/ncm.1"    "${DIR}/configs/c.1"
-ln -s "${DIR}/functions/rndis.0" "${DIR}/configs/c.1"
-ln -s "${DIR}/functions/ffs.adb" "${DIR}/configs/c.1"
-ln -s "${DIR}/configs/c.1" "${DIR}/os_desc"
+# activate both functions (configfs requires explicit symlink target name)
+ln -s "${DIR}/functions/ncm.1"    "${DIR}/configs/c.1/ncm.1"
+ln -s "${DIR}/functions/rndis.0" "${DIR}/configs/c.1/rndis.0"
+ln -s "${DIR}/functions/ffs.adb" "${DIR}/configs/c.1/ffs.adb"
+ln -s "${DIR}/configs/c.1" "${DIR}/os_desc/c.1"
 echo $(ls /sys/class/udc) > "${DIR}/UDC"
 
 # start adbd (FunctionFS endpoints are now available). Use start-stop-daemon
