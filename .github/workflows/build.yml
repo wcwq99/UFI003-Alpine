@@ -2,6 +2,16 @@ name: Build
 
 on:
   workflow_dispatch:
+  push:
+    branches: [alpine]
+    paths:
+      - '.github/workflows/build.yml'
+      - 'scripts/**'
+      - 'configs/**'
+      - 'prebuilt/**'
+      - 'dtbs/**'
+      - 'src/**'
+      - 'build.sh'
 
 jobs:
   build:
