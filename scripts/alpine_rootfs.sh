@@ -36,6 +36,7 @@ cp $(which qemu-aarch64-static) ${CHROOT}/usr/bin
 chroot ${CHROOT} ash -l -c "
 apk add --allow-untrusted postmarketos-keys@pmos
 apk add \
+    android-tools \
     bridge-utils \
     chrony \
     dropbear \
@@ -106,6 +107,10 @@ rc-update add dropbear default
 rc-update add rmtfs default
 rc-update add networkmanager default
 rc-update add networkmanager-dispatcher default
+# adbd OpenRC service comes from the android-tools package; enable it so ADB
+# starts at boot. The setup_ncm_gadget.sh udev rule also starts adbd as a
+# fallback when the USB gadget is configured.
+rc-update add adbd default 2>/dev/null || true
 rc-update add wpa_supplicant default
 "
 echo 'user ALL=(ALL:ALL) NOPASSWD: ALL' > ${CHROOT}/etc/sudoers.d/user

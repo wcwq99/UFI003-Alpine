@@ -18,7 +18,13 @@ RNDIS_DEV_ADDR="8a:b1:27:16:8e:a8"
 [ -d "${DIR}" ] && { echo "USB Gadget already configured"; exit 0; }
 
 # create gadget entry
-mkdir -p "${DIR}/functions/ncm.1" "${DIR}/functions/rndis.0"
+mkdir -p "${DIR}/functions/ncm.1" "${DIR}/functions/rndis.0" "${DIR}/functions/ffs.adb"
+
+# FunctionFS for ADB: adbd will write to /dev/usb-ffs/adb/
+mkdir -p /dev/usb-ffs/adb
+# mount functionfs (will be done by adbd service before exec; this mount is
+# idempotent and safe to retry)
+mount -t functionfs adb /dev/usb-ffs/adb 2>/dev/null || true
 
 # setup
 echo "0x0200"        > "${DIR}/bcdUSB"          # USB 2.0
@@ -70,5 +76,12 @@ echo "0xef"   > "${DIR}/bDeviceClass"
 # activate both functions
 ln -s "${DIR}/functions/ncm.1"    "${DIR}/configs/c.1"
 ln -s "${DIR}/functions/rndis.0" "${DIR}/configs/c.1"
+ln -s "${DIR}/functions/ffs.adb" "${DIR}/configs/c.1"
 ln -s "${DIR}/configs/c.1" "${DIR}/os_desc"
 echo $(ls /sys/class/udc) > "${DIR}/UDC"
+
+# start adbd (FunctionFS endpoints are now available). Use start-stop-daemon
+# style so re-running this script doesn't double-spawn adbd.
+if [ -x /usr/bin/adbd ] && ! pgrep -x adbd >/dev/null 2>&1; then
+    /usr/bin/adbd
+fi
