@@ -1,32 +1,76 @@
-diff --git a/app/aboot/recovery.c b/app/aboot/recovery.c
-index b1ad21c..79ca572 100644
---- a/app/aboot/recovery.c
-+++ b/app/aboot/recovery.c
-@@ -423,9 +423,13 @@ int _emmc_recovery_init(void)
- 		boot_into_recovery = 1;
- 	}
- 
--	if (target_dynamic_partition_supported() &&
--		!strcmp(msg->command, RECOVERY_BOOT_FASTBOOT_CMD)) {
--		boot_into_recovery = 1;
-+	/* "boot-fastboot" -> enter fastboot mode directly. This is normally only
-+	 * honored on devices with dynamic partitions (userspace fastbootd), but
-+	 * the UFI003 has no recovery partition and no dynamic partitions, so we
-+	 * treat it as a plain "reboot into fastboot" request instead.
-+	 */
-+	if (!strcmp(msg->command, RECOVERY_BOOT_FASTBOOT_CMD)) {
-+		boot_into_fastboot = true;
- 	}
- 
- 	if (!strcmp("update-radio",msg->command))
-diff --git a/app/aboot/recovery.h b/app/aboot/recovery.h
-index 77428e8..d462c4e 100644
---- a/app/aboot/recovery.h
-+++ b/app/aboot/recovery.h
-@@ -122,5 +122,6 @@ int get_ffbm(char *ffbm, unsigned size);
- VirtualAbMergeStatus GetSnapshotMergeStatus(void);
- int SetSnapshotMergeStatus (VirtualAbMergeStatus MergeStatus);
- extern unsigned boot_into_recovery;
+diff --git a/lk2nd/misc.c b/lk2nd/misc.c
+new file mode 100644
+index 0000000..5fb87b4
+--- /dev/null
++++ b/lk2nd/misc.c
+@@ -0,0 +1,60 @@
++// SPDX-License-Identifier: BSD-3-Clause
++/*
++ * Reboot-into-fastboot support for lk1st.
++ *
++ * The stock lk1st (ABOOT_STANDALONE) does not compile app/aboot/recovery.c and
++ * has no check_reboot_mode() on msm8916, so a "reboot-fastboot" request from
++ * Linux cannot be honored via the standard recovery-message path. Instead we
++ * read the misc partition's recovery_message.command field directly during
++ * lk2nd_init() and force boot_into_fastboot when it says "boot-fastboot".
++ */
++
++#include <debug.h>
++#include <dev/flash.h>
++#include <partition_parser.h>
++#include <string.h>
++#include <target.h>
++
++#include <lk2nd/init.h>
++
 +extern bool boot_into_fastboot;
++
++#define RECOVERY_CMD "boot-fastboot"
++#define MISC_PARTITION "misc"
++#define RECOVERY_MESSAGE_COMMAND_SIZE 32
++#define MISC_COMMAND_PAGE 1
++
++static void lk2nd_misc_check_fastboot(void)
++{
++	int index;
++	unsigned long long offset;
++	uint32_t buf[RECOVERY_MESSAGE_COMMAND_SIZE / sizeof(uint32_t)];
++
++	if (!target_is_emmc_boot())
++		return;
++
++	index = partition_get_index(MISC_PARTITION);
++	if (index == INVALID_PTN) {
++		dprintf(INFO, "lk2nd: %s partition not found\n", MISC_PARTITION);
++		return;
++	}
++	offset = partition_get_offset(index);
++
++	/* lk reads the recovery message from page 1 of misc (page 0 is
++	 * reserved for the bootloader message on some devices) */
++	offset += MISC_COMMAND_PAGE * flash_page_size();
++
++	if (mmc_read(offset, buf, sizeof(buf))) {
++		dprintf(CRITICAL, "lk2nd: failed to read %s partition\n",
++			MISC_PARTITION);
++		return;
++	}
++	buf[RECOVERY_MESSAGE_COMMAND_SIZE / sizeof(uint32_t) - 1] = 0;
++
++	if (!strcmp((const char *)buf, RECOVERY_CMD)) {
++		dprintf(INFO, "lk2nd: %s requested, entering fastboot\n",
++			RECOVERY_CMD);
++		boot_into_fastboot = true;
++	}
++}
++LK2ND_INIT(lk2nd_misc_check_fastboot);
+diff --git a/lk2nd/rules.mk b/lk2nd/rules.mk
+index 4c0209c..4f2f81f 100644
+--- a/lk2nd/rules.mk
++++ b/lk2nd/rules.mk
+@@ -22,4 +22,5 @@ endif
+ $(BUILDDIR)/$(LOCAL_DIR)/%.o: CFLAGS := $(CFLAGS) -Wmissing-prototypes
  
- #endif
+ OBJS += $(LOCAL_DIR)/init.o
++OBJS += $(LOCAL_DIR)/misc.o
+ include $(LOCAL_DIR)/util/rules.mk

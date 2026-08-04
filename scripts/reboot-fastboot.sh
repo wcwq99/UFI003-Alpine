@@ -21,9 +21,9 @@ if [ -z "$MISC_DEV" ]; then
 fi
 echo "misc partition: $MISC_DEV"
 
-# lk reads the boot message command from the start of misc (struct
-# recovery_message.command, 32 bytes at offset 0).
-printf 'boot-fastboot' | dd of="$MISC_DEV" bs=1 count=32 conv=notrunc 2>/dev/null
+# lk reads the boot message command from page 1 of misc (struct
+# recovery_message.command, 32 bytes at offset 512; page 0 is reserved).
+printf 'boot-fastboot' | dd of="$MISC_DEV" bs=1 seek=512 count=32 conv=notrunc 2>/dev/null
 sync
 
 echo "Rebooting into fastboot..."
