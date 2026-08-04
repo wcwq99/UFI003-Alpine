@@ -1,11 +1,11 @@
 [connection]
-id=usb
-uuid=6d73d069-b482-41ec-bbc2-f769089700cb
+id=usb-rndis
+uuid=6d73d069-b482-41ec-bbc2-f769089700cd
 type=ethernet
-autoconnect-priority=50
+autoconnect-priority=100
 
 [ethernet]
-mac-address=8A:B1:27:16:8E:A7
+mac-address=8A:B1:27:16:8E:A8
 
 [ipv4]
 address1=192.168.5.1/24
