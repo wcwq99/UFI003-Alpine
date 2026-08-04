@@ -57,25 +57,66 @@ function Invoke-Fastboot {
     )
 
     Write-Host ("fastboot " + ($Arguments -join " ")) -ForegroundColor DarkGray
-    & $script:FastbootExecutable @Arguments 2>&1 | ForEach-Object { Write-Host $_ }
-    $exitCode = $LASTEXITCODE
+    $result = Invoke-FastbootCapture $Arguments
+    $result.Output | ForEach-Object { Write-Host $_ }
+    $exitCode = $result.ExitCode
     if (($exitCode -ne 0) -and (-not $AllowFailure)) {
         throw "fastboot failed with exit code ${exitCode}: $($Arguments -join ' ')"
     }
     return $exitCode
 }
 
+function Invoke-FastbootCapture {
+    param(
+        [Parameter(Mandatory, Position = 0)]
+        [string[]]$Arguments
+    )
+
+    # fastboot writes normal progress and getvar output to stderr. Windows
+    # PowerShell can otherwise promote those lines to terminating errors when
+    # the script is running with ErrorActionPreference=Stop.
+    $previousPreference = $ErrorActionPreference
+    try {
+        $ErrorActionPreference = "Continue"
+        $output = @(& $script:FastbootExecutable @Arguments 2>&1)
+        $exitCode = $LASTEXITCODE
+    }
+    finally {
+        $ErrorActionPreference = $previousPreference
+    }
+
+    return [PSCustomObject]@{
+        Output = $output
+        ExitCode = $exitCode
+    }
+}
+
 function Get-FastbootDevices {
-    $output = & $script:FastbootExecutable devices 2>&1
-    if ($LASTEXITCODE -ne 0) {
-        throw "Unable to enumerate fastboot devices: $($output -join [Environment]::NewLine)"
+    $result = Invoke-FastbootCapture @("devices")
+    if ($result.ExitCode -ne 0) {
+        throw "Unable to enumerate fastboot devices: $($result.Output -join [Environment]::NewLine)"
     }
     return @(
-        $output |
+        $result.Output |
             ForEach-Object { $_.ToString().Trim() } |
             Where-Object { $_ -match "\s+fastboot$" } |
             ForEach-Object { ($_ -split "\s+")[0] }
     )
+}
+
+function Get-FastbootPartitionSize {
+    param([Parameter(Mandatory)][string]$Partition)
+
+    $result = Invoke-FastbootCapture @("getvar", "partition-size:$Partition")
+    if ($result.ExitCode -ne 0) {
+        throw "Unable to query the size of calibration partition $Partition"
+    }
+    $text = $result.Output -join "`n"
+    $pattern = "(?im)partition-size:$([regex]::Escape($Partition)):\s*(0x[0-9a-f]+)"
+    if ($text -notmatch $pattern) {
+        throw "fastboot did not report a parseable size for calibration partition $Partition"
+    }
+    return [Convert]::ToInt64($Matches[1].Substring(2), 16)
 }
 
 function Wait-OneFastbootDevice {
@@ -143,11 +184,12 @@ function Backup-CalibrationPartitions {
 
     foreach ($Partition in @("cdt", "sec", "fsc", "fsg", "modemst1", "modemst2")) {
         $Destination = Join-Path $DestinationDirectory "$Partition.bin"
+        $expectedSize = Get-FastbootPartitionSize $Partition
         Invoke-Fastboot @("oem", "dump", $Partition) | Out-Null
         Invoke-Fastboot @("get_staged", $Destination) | Out-Null
         if ((-not (Test-Path -LiteralPath $Destination -PathType Leaf)) -or
-            ((Get-Item -LiteralPath $Destination).Length -eq 0)) {
-            throw "Calibration backup is empty or missing: $Destination"
+            ((Get-Item -LiteralPath $Destination).Length -ne $expectedSize)) {
+            throw "Calibration backup size mismatch for $Partition; expected $expectedSize bytes"
         }
     }
 
@@ -185,8 +227,9 @@ function Flash-FullFirmware {
     else {
         $backupRoot = Join-Path $PSScriptRoot "backups"
     }
-    $deviceBackupDirectory = Join-Path $backupRoot (Get-Date -Format "yyyyMMdd-HHmmss")
-    New-Item -ItemType Directory -Path $deviceBackupDirectory -Force | Out-Null
+    New-Item -ItemType Directory -Path $backupRoot -Force | Out-Null
+    $deviceBackupDirectory = Join-Path $backupRoot (Get-Date -Format "yyyyMMdd-HHmmss-fff")
+    New-Item -ItemType Directory -Path $deviceBackupDirectory | Out-Null
 
     Write-Host "Starting calibration backup in $deviceBackupDirectory" -ForegroundColor Yellow
     Invoke-Fastboot @("erase", "boot") | Out-Null

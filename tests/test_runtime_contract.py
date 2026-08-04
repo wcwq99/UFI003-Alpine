@@ -27,6 +27,11 @@ class RuntimeContractTests(unittest.TestCase):
             self.assertIn("method=disabled", profile)
             self.assertNotIn("address1=192.168.5.1/24", profile)
 
+    def test_known_wifi_password_is_not_exposed_by_default(self):
+        hotspot = (REPO_ROOT / "configs" / "hotspot.nmconnection").read_text()
+
+        self.assertIn("autoconnect=false", hotspot)
+
     def test_rootfs_has_fastboot_but_no_fake_adb_or_dead_boot_mount(self):
         script = (REPO_ROOT / "scripts" / "alpine_rootfs.sh").read_text()
 
@@ -36,6 +41,14 @@ class RuntimeContractTests(unittest.TestCase):
         self.assertNotIn("/dev/mmcblk0p14", script)
         self.assertNotIn("configs/extlinux.conf", script)
 
+    def test_reboot_fastboot_uses_a_terminated_misc_command(self):
+        script = (REPO_ROOT / "scripts" / "reboot-fastboot.sh").read_text()
+
+        self.assertIn("count=32", script)
+        self.assertIn("boot-fastboot\\000", script)
+        self.assertIn("seek=512", script)
+        self.assertNotIn("by-partlabel/boot", script)
+
     def test_rootfs_does_not_ship_shared_keys_or_passwordless_root_console(self):
         script = (REPO_ROOT / "scripts" / "alpine_rootfs.sh").read_text()
 
@@ -44,6 +57,16 @@ class RuntimeContractTests(unittest.TestCase):
         self.assertIn("/sbin/getty -L 115200 ttyMSM0", script)
         self.assertIn('DROPBEAR_OPTS="-w"', script)
         self.assertNotIn("NOPASSWD", script)
+
+    def test_rootfs_build_parameters_cannot_inject_root_shell_commands(self):
+        script = (REPO_ROOT / "scripts" / "alpine_rootfs.sh").read_text()
+
+        self.assertIn("USER_NAME contains unsupported characters", script)
+        self.assertIn("USER_PASSWORD must contain printable single-line ASCII", script)
+        self.assertIn("HOST_NAME is not a valid single-label hostname", script)
+        self.assertIn("' openstick-setup \"$USER_NAME\"", script)
+        self.assertNotIn("adduser -D -s /bin/ash '$USER_NAME'", script)
+        self.assertNotIn("addgroup -S dnsmasq", script)
 
     def test_destructive_build_directories_are_guarded(self):
         rootfs = (REPO_ROOT / "scripts" / "alpine_rootfs.sh").read_text()

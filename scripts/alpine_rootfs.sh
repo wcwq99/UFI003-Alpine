@@ -33,12 +33,55 @@ USER_NAME=${USER_NAME:-user}
 USER_PASSWORD=${USER_PASSWORD:-openstick}
 export CHROOT
 
-case "$USER_NAME:$USER_PASSWORD" in
-    *:*:*)
-        echo "ERROR: USER_NAME and USER_PASSWORD may not contain ':'" >&2
+if [ "$DEVICE" != "ufi003" ]; then
+    echo "ERROR: this branch only supports DEVICE=ufi003" >&2
+    exit 1
+fi
+case "$USER_NAME" in
+    [a-z_]*) ;;
+    *)
+        echo "ERROR: USER_NAME must start with a lowercase letter or underscore" >&2
         exit 1
         ;;
 esac
+case "$USER_NAME" in
+    *[!a-z0-9_-]*)
+        echo "ERROR: USER_NAME contains unsupported characters" >&2
+        exit 1
+        ;;
+esac
+case "$HOST_NAME" in
+    [A-Za-z0-9]*) ;;
+    *)
+        echo "ERROR: HOST_NAME must start with an alphanumeric character" >&2
+        exit 1
+        ;;
+esac
+case "$HOST_NAME" in
+    *[!A-Za-z0-9-]*|*-)
+        echo "ERROR: HOST_NAME is not a valid single-label hostname" >&2
+        exit 1
+        ;;
+esac
+if [ "${#HOST_NAME}" -gt 63 ]; then
+    echo "ERROR: HOST_NAME exceeds 63 characters" >&2
+    exit 1
+fi
+case "$USER_PASSWORD" in
+    ''|*:*)
+        echo "ERROR: USER_PASSWORD must be non-empty and may not contain ':'" >&2
+        exit 1
+        ;;
+esac
+if [ "${#USER_PASSWORD}" -lt 8 ] || [ "${#USER_PASSWORD}" -gt 128 ]; then
+    echo "ERROR: USER_PASSWORD must contain 8 to 128 characters" >&2
+    exit 1
+fi
+if [ "$(printf '%s' "$USER_PASSWORD" | wc -l | tr -d ' ')" -ne 0 ] || \
+    printf '%s' "$USER_PASSWORD" | LC_ALL=C grep -q '[^ -~]'; then
+        echo "ERROR: USER_PASSWORD must contain printable single-line ASCII" >&2
+        exit 1
+fi
 
 rm -rf -- "$CHROOT"
 mkdir -p "$CHROOT/etc/apk"
@@ -71,39 +114,43 @@ apk add \
     android-tools \
     bridge-utils \
     chrony \
+    chrony-openrc \
     dbus \
     dropbear \
+    dropbear-openrc \
     e2fsprogs-extra \
     eudev \
-    gadget-tool \
     iptables \
     iw \
     msm-firmware-loader@pmos \
     networkmanager \
     networkmanager-cli \
     networkmanager-dnsmasq \
+    networkmanager-openrc \
     networkmanager-tui \
     networkmanager-wifi \
     networkmanager-wwan \
     openrc \
     rmtfs \
+    rmtfs-openrc \
     shadow \
     sudo \
     udev-init-scripts \
     udev-init-scripts-openrc \
     wireguard-tools \
     wireguard-tools-wg-quick \
-    wireless-regdb
+    wireless-regdb \
+    wpa_supplicant \
+    wpa_supplicant-openrc
 rm -f /etc/fstab
 command -v fastboot >/dev/null
 command -v NetworkManager >/dev/null
 '
 
-chroot "$CHROOT" ash -l -c "
-adduser -D -s /bin/ash '$USER_NAME'
+chroot "$CHROOT" ash -l -c '
+user_name=$1
+adduser -D -s /bin/ash "$user_name"
 passwd -l root
-addgroup -S dnsmasq
-adduser -S -D -H -h /dev/null -s /sbin/nologin -G dnsmasq -g dnsmasq dnsmasq
 
 rc-update add devfs sysinit
 rc-update add dmesg sysinit
@@ -120,12 +167,13 @@ rc-update add local default
 rc-update add mount-ro shutdown
 rc-update add killprocs shutdown
 rc-update add savecache shutdown
+rc-update add chronyd default
 rc-update add dropbear default
 rc-update add rmtfs default
 rc-update add networkmanager default
 rc-update add networkmanager-dispatcher default
 rc-update add wpa_supplicant default
-"
+' openstick-setup "$USER_NAME"
 printf '%s:%s\n' "$USER_NAME" "$USER_PASSWORD" | chroot "$CHROOT" chpasswd
 
 printf '%s ALL=(ALL:ALL) ALL\n' "$USER_NAME" > "$CHROOT/etc/sudoers.d/$USER_NAME"
@@ -149,7 +197,6 @@ mkdir -p "$PROFILE_DIR"
 cp configs/*.nmconnection "$PROFILE_DIR/"
 chmod 0600 "$PROFILE_DIR"/*.nmconnection
 
-cp -a configs/templates "$CHROOT/etc/gt"
 install -m 0755 scripts/setup_ncm_gadget.sh "$CHROOT/usr/local/bin/setup_ncm_gadget.sh"
 install -m 0755 scripts/reboot-fastboot.sh "$CHROOT/usr/local/bin/reboot-fastboot"
 

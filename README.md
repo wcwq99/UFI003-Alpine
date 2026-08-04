@@ -27,6 +27,12 @@ cd UFI003-Alpine
 sudo ./build.sh
 ```
 
+公开发布前建议在构建时替换初始密码：
+
+```sh
+sudo env USER_PASSWORD='replace-with-a-unique-password' ./build.sh
+```
+
 也可以在 GitHub Actions 中手动运行 `Build` 工作流。本地和 CI 都会先运行契约测试，只有最终验证器通过才生成 `files/SHA256SUMS` 并发布刷机包。
 
 关键构建步骤为：
@@ -118,10 +124,16 @@ edl reset
 | root | 已锁定，使用 `sudo` |
 | USB 地址 | `192.168.5.1/24` |
 | SSH | `ssh user@192.168.5.1` |
-| Wi-Fi SSID | `Openstick` |
-| Wi-Fi 密码 | `openstick` |
+| Wi-Fi 热点 | 配置已预置，但默认不自动开启 |
 
 USB gadget 同时创建 NCM 与 RNDIS，以兼容 Linux/macOS 和 Windows；NetworkManager 将两个接口加入同一个 `usbbr0`，只由桥持有地址和共享/NAT 配置。
+
+首次登录后立即运行 `passwd` 更改默认密码。需要 Wi-Fi 热点时，先设置新的 WPA 密码再启用：
+
+```sh
+sudo nmcli connection modify hotspot wifi-sec.psk '新的强密码' connection.autoconnect yes
+sudo nmcli connection up hotspot
+```
 
 镜像没有伪装 ADB 功能：Alpine 的 `android-tools` 提供 `fastboot`/`adb` 客户端，但不提供可服务 FunctionFS gadget 的 `adbd`。暴露一个没有守护进程的 ADB FunctionFS 会导致整个 USB gadget 无法绑定，所以发布配置明确只启用可工作的 NCM/RNDIS 网络共享。
 
