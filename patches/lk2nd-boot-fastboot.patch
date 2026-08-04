@@ -1,9 +1,9 @@
 diff --git a/lk2nd/misc.c b/lk2nd/misc.c
 new file mode 100644
-index 0000000..5fb87b4
+index 0000000..38db4c2
 --- /dev/null
 +++ b/lk2nd/misc.c
-@@ -0,0 +1,60 @@
+@@ -0,0 +1,62 @@
 +// SPDX-License-Identifier: BSD-3-Clause
 +/*
 + * Reboot-into-fastboot support for lk1st.
@@ -47,8 +47,10 @@ index 0000000..5fb87b4
 +	offset = partition_get_offset(index);
 +
 +	/* lk reads the recovery message from page 1 of misc (page 0 is
-+	 * reserved for the bootloader message on some devices) */
-+	offset += MISC_COMMAND_PAGE * flash_page_size();
++	 * reserved for the bootloader message on some devices). MSM8916 eMMC
++	 * uses 512-byte sectors; flash_page_size() is not linked into the
++	 * lk2nd module so use the known value. */
++	offset += MISC_COMMAND_PAGE * 512;
 +
 +	if (mmc_read(offset, buf, sizeof(buf))) {
 +		dprintf(CRITICAL, "lk2nd: failed to read %s partition\n",
