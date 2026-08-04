@@ -7,6 +7,7 @@ cd "$ROOT_DIR"
 LK2ND_COMPATIBLE=${LK2ND_COMPATIBLE:-zhihe,various}
 LK2ND_DTB=${LK2ND_DTB:-msm8916-512mb-mtp.dtb}
 PATCH_FILE=patches/lk2nd-boot-fastboot.patch
+MMC_PATCH=patches/lk2nd-mmc-read-align.patch
 PROJECT_FILE=src/lk2nd/project/lk1st-msm8916.mk
 HS200_DEFINE='DEFINES += USE_TARGET_HS200_CAPS=1'
 
@@ -29,6 +30,18 @@ elif patch -p1 -d src/lk2nd --reverse --dry-run < "$PATCH_FILE" >/dev/null 2>&1;
     echo "lk2nd boot-fastboot patch already applied"
 else
     echo "ERROR: $PATCH_FILE does not apply to the pinned lk2nd submodule" >&2
+    exit 1
+fi
+
+# Fix mmc_read to round up data_len to 512-byte alignment.
+# Without this, non-aligned reads (e.g. 32-byte misc command) can trigger
+# MCI ASSERT on MSM8916 because the eMMC controller requires 512-byte blocks.
+if patch -p1 -d src/lk2nd --forward --dry-run < "$MMC_PATCH" >/dev/null 2>&1; then
+    patch -p1 -d src/lk2nd --forward < "$MMC_PATCH"
+elif patch -p1 -d src/lk2nd --reverse --dry-run < "$MMC_PATCH" >/dev/null 2>&1; then
+    echo "lk2nd mmc_read align patch already applied"
+else
+    echo "ERROR: $MMC_PATCH does not apply to the pinned lk2nd submodule" >&2
     exit 1
 fi
 

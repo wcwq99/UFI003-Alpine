@@ -1,0 +1,14 @@
+diff --git a/platform/msm_shared/mmc.c b/platform/msm_shared/mmc.c
+index 507a6e94..3978fcda 100644
+--- a/platform/msm_shared/mmc.c
++++ b/platform/msm_shared/mmc.c
+@@ -2501,6 +2501,9 @@ mmc_read(unsigned long long data_addr, unsigned int *out, unsigned int data_len)
+ 	unsigned int data_limit = mmc_card.rd_block_len * 0xffff;
+ 	unsigned int this_len;
+ 
++	if (data_len % 512)
++		data_len = ROUND_TO_PAGE(data_len, 511);
++
+ 	do {
+ 		this_len = (data_len > data_limit) ? data_limit : data_len;
+ 
