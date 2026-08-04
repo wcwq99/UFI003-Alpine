@@ -56,8 +56,11 @@ function Invoke-Fastboot {
         [switch]$AllowFailure
     )
 
-    Write-Host ("fastboot " + ($Arguments -join " ")) -ForegroundColor DarkGray
-    $result = Invoke-FastbootCapture $Arguments
+    # Always target the specific device serial to prevent cross-flashing
+    # when multiple devices are connected.
+    $fullArgs = @("-s", $script:DeviceSerial) + $Arguments
+    Write-Host ("fastboot " + ($fullArgs -join " ")) -ForegroundColor DarkGray
+    $result = Invoke-FastbootCapture $fullArgs
     $result.Output | ForEach-Object { Write-Host $_ }
     $exitCode = $result.ExitCode
     if (($exitCode -ne 0) -and (-not $AllowFailure)) {
@@ -125,6 +128,7 @@ function Wait-OneFastbootDevice {
         $devices = @(Get-FastbootDevices)
         if ($devices.Count -eq 1) {
             Write-Host "Using fastboot device $($devices[0])." -ForegroundColor Green
+            $script:DeviceSerial = $devices[0]
             return $devices[0]
         }
         if ($devices.Count -gt 1) {

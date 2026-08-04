@@ -119,11 +119,11 @@ edl reset
 
 | 项目 | 值 |
 | --- | --- |
-| 普通用户 | `user` |
-| 初始密码 | `openstick` |
-| root | 已锁定，使用 `sudo` |
+| 用户 | `root` |
+| 密码 | `password` |
 | USB 地址 | `192.168.5.1/24` |
-| SSH | `ssh user@192.168.5.1` |
+| SSH | `ssh root@192.168.5.1` |
+| SSH 安全 | iptables 限制 SSH 仅通过 USB 接口（usb0）访问 |
 | Wi-Fi 热点 | 配置已预置，但默认不自动开启 |
 
 USB gadget 同时创建 NCM 与 RNDIS，以兼容 Linux/macOS 和 Windows；NetworkManager 将两个接口加入同一个 `usbbr0`，只由桥持有地址和共享/NAT 配置。

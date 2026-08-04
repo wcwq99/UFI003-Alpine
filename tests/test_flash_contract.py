@@ -31,6 +31,10 @@ class FlashContractTests(unittest.TestCase):
         self.assertIn("Expected exactly one fastboot device", self.script)
         self.assertNotIn("wait-for-devices", self.script)
 
+    def test_fastboot_commands_use_device_serial(self):
+        self.assertIn("$script:DeviceSerial", self.script)
+        self.assertIn('@("-s", $script:DeviceSerial)', self.script)
+
     def test_paths_and_hashes_are_fail_closed(self):
         self.assertIn("$PSScriptRoot", self.script)
         self.assertIn("SHA256SUMS", self.script)

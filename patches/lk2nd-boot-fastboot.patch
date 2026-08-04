@@ -1,9 +1,9 @@
 diff --git a/lk2nd/misc.c b/lk2nd/misc.c
 new file mode 100644
-index 0000000..38db4c2
+index 0000000..62c5e3d
 --- /dev/null
 +++ b/lk2nd/misc.c
-@@ -0,0 +1,62 @@
+@@ -0,0 +1,81 @@
 +// SPDX-License-Identifier: BSD-3-Clause
 +/*
 + * Reboot-into-fastboot support for lk1st.
@@ -13,6 +13,9 @@ index 0000000..38db4c2
 + * Linux cannot be honored via the standard recovery-message path. Instead we
 + * read the misc partition's recovery_message.command field directly during
 + * lk2nd_init() and force boot_into_fastboot when it says "boot-fastboot".
++ *
++ * After entering fastboot, the command field is cleared so the next normal
++ * boot proceeds without re-entering fastboot.
 + */
 +
 +#include <debug.h>
@@ -52,6 +55,7 @@ index 0000000..38db4c2
 +	 * lk2nd module so use the known value. */
 +	offset += MISC_COMMAND_PAGE * 512;
 +
++	memset(buf, 0, sizeof(buf));
 +	if (mmc_read(offset, buf, sizeof(buf))) {
 +		dprintf(CRITICAL, "lk2nd: failed to read %s partition\n",
 +			MISC_PARTITION);
@@ -62,6 +66,17 @@ index 0000000..38db4c2
 +	if (!strcmp((const char *)buf, RECOVERY_CMD)) {
 +		dprintf(INFO, "lk2nd: %s requested, entering fastboot\n",
 +			RECOVERY_CMD);
++
++		/* Clear the command so the next boot is normal. mmc_write
++		 * rounds data_len up to 512 bytes — the extra zeros are
++		 * harmless padding in the recovery message area. */
++		memset(buf, 0, sizeof(buf));
++		if (mmc_write(offset, sizeof(buf), buf)) {
++			dprintf(CRITICAL,
++				"lk2nd: failed to clear %s command on %s\n",
++				RECOVERY_CMD, MISC_PARTITION);
++		}
++
 +		boot_into_fastboot = true;
 +	}
 +}
@@ -72,7 +87,7 @@ index 4c0209c..4f2f81f 100644
 +++ b/lk2nd/rules.mk
 @@ -22,4 +22,5 @@ endif
  $(BUILDDIR)/$(LOCAL_DIR)/%.o: CFLAGS := $(CFLAGS) -Wmissing-prototypes
- 
+
  OBJS += $(LOCAL_DIR)/init.o
 +OBJS += $(LOCAL_DIR)/misc.o
  include $(LOCAL_DIR)/util/rules.mk

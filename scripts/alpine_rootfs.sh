@@ -148,9 +148,10 @@ command -v NetworkManager >/dev/null
 '
 
 chroot "$CHROOT" ash -l -c '
-user_name=$1
-adduser -D -s /bin/ash "$user_name"
-passwd -l root
+# root-only setup: no regular user account, root with password for SSH
+echo "root:password" | chpasswd
+# ensure root login is allowed
+
 
 rc-update add devfs sysinit
 rc-update add dmesg sysinit
@@ -173,16 +174,13 @@ rc-update add rmtfs default
 rc-update add networkmanager default
 rc-update add networkmanager-dispatcher default
 rc-update add wpa_supplicant default
-' openstick-setup "$USER_NAME"
-printf '%s:%s\n' "$USER_NAME" "$USER_PASSWORD" | chroot "$CHROOT" chpasswd
+'
 
-printf '%s ALL=(ALL:ALL) ALL\n' "$USER_NAME" > "$CHROOT/etc/sudoers.d/$USER_NAME"
-chmod 0440 "$CHROOT/etc/sudoers.d/$USER_NAME"
-
-# Root SSH is disabled. Dropbear generates unique host keys on first boot.
+# Root SSH is enabled. Dropbear generates unique host keys on first boot.
 mkdir -p "$CHROOT/etc/dropbear"
 rm -f "$CHROOT"/etc/dropbear/dropbear_*_host_key
-sed -i 's/^DROPBEAR_OPTS=.*/DROPBEAR_OPTS="-w"/' "$CHROOT/etc/conf.d/dropbear"
+# Allow root SSH login with password auth. dropbear -w disables root login.
+sed -i 's/^DROPBEAR_OPTS=.*/DROPBEAR_OPTS=""/' "$CHROOT/etc/conf.d/dropbear"
 
 # Serial access remains available, but through a real login prompt.
 sed -i '/^ttyMSM0:/d' "$CHROOT/etc/inittab"
@@ -259,6 +257,22 @@ if [ -n "$ROOT_DEV" ] && [ -b "$ROOT_DEV" ]; then
 fi
 EOF
 chmod 0755 "$CHROOT/etc/local.d/resize-rootfs.start"
+
+# Restrict SSH to USB interface (usb0) only via iptables.
+# Dropbear listens on 0.0.0.0:22 but iptables blocks all except usb0.
+cat > "$CHROOT/etc/local.d/ssh-restrict.start" <<'EOF'
+#!/bin/sh
+iptables -A INPUT -p tcp --dport 22 -i usb0 -j ACCEPT
+iptables -A INPUT -p tcp --dport 22 -j DROP
+EOF
+chmod 0755 "$CHROOT/etc/local.d/ssh-restrict.start"
+
+cat > "$CHROOT/etc/local.d/ssh-restrict.stop" <<'EOF'
+#!/bin/sh
+iptables -D INPUT -p tcp --dport 22 -i usb0 -j ACCEPT 2>/dev/null || true
+iptables -D INPUT -p tcp --dport 22 -j DROP 2>/dev/null || true
+EOF
+chmod 0755 "$CHROOT/etc/local.d/ssh-restrict.stop"
 
 # Force machine-id and SSH host-key generation to be device-specific.
 rm -f "$CHROOT/etc/machine-id"

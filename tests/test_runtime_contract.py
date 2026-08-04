@@ -55,7 +55,7 @@ class RuntimeContractTests(unittest.TestCase):
         self.assertNotIn("dropbearkey", script)
         self.assertNotIn("ttyMSM0::respawn:/bin/sh", script)
         self.assertIn("/sbin/getty -L 115200 ttyMSM0", script)
-        self.assertIn('DROPBEAR_OPTS="-w"', script)
+        self.assertIn('DROPBEAR_OPTS=""', script)
         self.assertNotIn("NOPASSWD", script)
 
     def test_rootfs_build_parameters_cannot_inject_root_shell_commands(self):
@@ -64,8 +64,7 @@ class RuntimeContractTests(unittest.TestCase):
         self.assertIn("USER_NAME contains unsupported characters", script)
         self.assertIn("USER_PASSWORD must contain printable single-line ASCII", script)
         self.assertIn("HOST_NAME is not a valid single-label hostname", script)
-        self.assertIn("' openstick-setup \"$USER_NAME\"", script)
-        self.assertNotIn("adduser -D -s /bin/ash '$USER_NAME'", script)
+        self.assertIn("echo \"root:password\" | chpasswd", script)
         self.assertNotIn("addgroup -S dnsmasq", script)
 
     def test_destructive_build_directories_are_guarded(self):
