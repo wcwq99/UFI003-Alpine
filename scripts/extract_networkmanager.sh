@@ -1,24 +1,46 @@
-#!/bin/sh -e
+#!/bin/sh
+set -eu
 
-export BASE=${CHROOT}/newroot
-export RELEASE=v3.20
+ROOT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+
+validate_work_dir() {
+    candidate=$(readlink -m -- "$1")
+    case "$candidate" in
+        "$ROOT_DIR"/*) ;;
+        *)
+            echo "ERROR: refusing NetworkManager work directory: $candidate" >&2
+            exit 1
+            ;;
+    esac
+    [ "$candidate" != "$ROOT_DIR" ] || {
+        echo "ERROR: repository root cannot be a work directory" >&2
+        exit 1
+    }
+    printf '%s\n' "$candidate"
+}
+
+: "${CHROOT:?CHROOT must be set by alpine_rootfs.sh}"
+CHROOT=$(validate_work_dir "$CHROOT")
+BASE=$(validate_work_dir "$CHROOT/newroot")
+export BASE CHROOT
+RELEASE=v3.20
 # China mirror
 export MIRROR=${MIRROR=https://mirrors.tuna.tsinghua.edu.cn/alpine}
 
-rm -rf ${BASE}
+rm -rf -- "$BASE"
 
-mkdir -p ${BASE}/etc/apk
-cat << EOF > ${BASE}/etc/apk/repositories
+mkdir -p "$BASE/etc/apk"
+cat << EOF > "$BASE/etc/apk/repositories"
 ${MIRROR}/${RELEASE}/main
 ${MIRROR}/${RELEASE}/community
 EOF
 
 # apk.static runs post-install scripts in a chroot; copy qemu-aarch64-static so
 # binfmt_misc can find the interpreter inside the chroot.
-mkdir -p ${BASE}/usr/bin
-cp $(which qemu-aarch64-static) ${BASE}/usr/bin/
+mkdir -p "$BASE/usr/bin"
+cp "$(command -v qemu-aarch64-static)" "$BASE/usr/bin/"
 
-./apk.static add --arch aarch64 -p ${BASE} --initdb -U --allow-untrusted \
+./apk.static add --arch aarch64 -p "$BASE" --initdb -U --allow-untrusted \
     alpine-base \
     musl-utils \
     networkmanager-cli \
@@ -88,7 +110,7 @@ ln -s ../run ${BASE}/new/var/
 
 # extract files running in chroot env
 
-chroot ${BASE} ash -l -c '
+chroot "$BASE" ash -l -c '
 files="
     /sbin/eapol_test
     /sbin/modprobe
@@ -126,7 +148,7 @@ done
 cp /usr/lib/NetworkManager/ -a /new/usr/lib
 '
 
-cp -a ${BASE}/new/* ${CHROOT}/usr/local
+cp -a "$BASE/new/." "$CHROOT/usr/local/"
 
 # add chroot helper script
 cat << EOF > ${CHROOT}/usr/local/bin/chroot.sh
@@ -138,9 +160,9 @@ if [ "\${BIN}" = "chroot.sh" ]; then
     exit 1
 fi
 
-unshare -mr chroot /usr/local \${BIN} \$@
+exec unshare -mr chroot /usr/local "\${BIN}" "\$@"
 EOF
-chmod a+x ${CHROOT}/usr/local/bin/chroot.sh
+chmod a+x "$CHROOT/usr/local/bin/chroot.sh"
 
 # populate resolv
-echo "nameserver 8.8.8.8" > ${CHROOT}/usr/local/etc/resolv.conf
+echo "nameserver 8.8.8.8" > "$CHROOT/usr/local/etc/resolv.conf"

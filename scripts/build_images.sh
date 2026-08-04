@@ -1,44 +1,66 @@
-#!/bin/sh -e
+#!/bin/sh
+set -eu
 
-CHROOT=${CHROOT=$(pwd)/rootfs}
-DEVICE=${DEVICE=ufi003}
-PREBUILT=prebuilt/${DEVICE}
+ROOT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+cd "$ROOT_DIR"
 
-# package rootfs
-rm -f rootfs.raw
-mkdir -p files mnt
+DEVICE=${DEVICE:-ufi003}
+PREBUILT="prebuilt/$DEVICE"
+RAW_IMAGE="$ROOT_DIR/rootfs.raw"
+MOUNT_DIR="$ROOT_DIR/mnt"
+MOUNTED=0
 
-# CRITICAL: do NOT regenerate boot.img. The boot.img from the original flashing
-# pack is paired with the prebuilt kernel modules we copied into the rootfs.
-# Regenerating boot.img would mismatch the kernel and break module loading.
-# Just copy the original boot.img verbatim to files/boot.bin
-BOOT_SRC="${PREBUILT}/boot.img"
-if [ -f "${BOOT_SRC}" ]; then
-    cp "${BOOT_SRC}" files/boot.bin
-    echo "Using original boot.img from flashing pack: ${BOOT_SRC}"
-else
-    echo "ERROR: boot.img not found at ${BOOT_SRC}" >&2
+unmount_rootfs() {
+    [ "$MOUNTED" -eq 1 ] || return 0
+    sync
+    if command -v fusermount3 >/dev/null 2>&1; then
+        fusermount3 -u "$MOUNT_DIR" 2>/dev/null || umount "$MOUNT_DIR"
+    elif command -v fusermount >/dev/null 2>&1; then
+        fusermount -u "$MOUNT_DIR" 2>/dev/null || umount "$MOUNT_DIR"
+    else
+        umount "$MOUNT_DIR"
+    fi
+    MOUNTED=0
+}
+
+cleanup() {
+    unmount_rootfs || true
+    rm -f -- "$RAW_IMAGE"
+}
+trap cleanup EXIT INT TERM
+
+if [ ! -s alpine_rootfs.tgz ]; then
+    echo "ERROR: alpine_rootfs.tgz is missing; run alpine_rootfs.sh first" >&2
+    exit 1
+fi
+if [ ! -s "$PREBUILT/boot.img" ]; then
+    echo "ERROR: matched UFI003 boot image is missing: $PREBUILT/boot.img" >&2
     exit 1
 fi
 
-# create root img (ext4, 1.5GB to match the original partition size)
-truncate -s 1610612736 rootfs.raw
-mkfs.ext4 -F rootfs.raw
-mkdir -p mnt
-# Use fuse2fs if available (works in containers without /dev/loop*),
-# otherwise fall back to a loop mount.
+mkdir -p files "$MOUNT_DIR"
+cp "$PREBUILT/boot.img" files/boot.bin
+
+# 1.5 GiB fits the supported UFI003 storage profile and remains sparse on disk.
+rm -f -- "$RAW_IMAGE"
+truncate -s 1610612736 "$RAW_IMAGE"
+mkfs.ext4 -F -L rootfs "$RAW_IMAGE"
+
 if command -v fuse2fs >/dev/null 2>&1; then
-    fuse2fs -o fakeroot rootfs.raw mnt
-    tar xpf alpine_rootfs.tgz -C mnt --exclude='./boot/*' --exclude='./root/*' --exclude='./dev/*'
-    umount mnt
+    fuse2fs -o fakeroot "$RAW_IMAGE" "$MOUNT_DIR"
 else
-    mount -o loop rootfs.raw mnt
-    tar xpf alpine_rootfs.tgz -C mnt --exclude='./boot/*' --exclude='./root/*' --exclude='./dev/*'
-    umount mnt
+    mount -o loop "$RAW_IMAGE" "$MOUNT_DIR"
 fi
+MOUNTED=1
 
-# create sparse android image (fastboot flash -S 200m compatible)
-img2simg rootfs.raw files/alpine_rootfs.bin
+tar xpf alpine_rootfs.tgz -C "$MOUNT_DIR" \
+    --exclude='./root/*' \
+    --exclude='./dev/*'
+unmount_rootfs
 
-# clean up
-rm -f rootfs.raw boot.raw
+e2fsck -fn "$RAW_IMAGE"
+img2simg "$RAW_IMAGE" files/alpine_rootfs.bin
+if [ ! -s files/alpine_rootfs.bin ]; then
+    echo "ERROR: sparse rootfs image was not created" >&2
+    exit 1
+fi
