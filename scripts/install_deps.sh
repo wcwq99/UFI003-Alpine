@@ -7,9 +7,12 @@ apt install -y \
     device-tree-compiler \
     e2fsprogs \
     fdisk \
+    fuse2fs \
     gcc-aarch64-linux-gnu \
     gcc-arm-none-eabi \
     make \
+    patch \
+    python3 \
     python3-cryptography \
     python3-pyasn1-modules \
     python3-pycryptodome \
@@ -29,4 +32,3 @@ if [ ! -e /proc/sys/fs/binfmt_misc/qemu-aarch64 ]; then
     fi
 fi
 echo "binfmt qemu-aarch64 registered: $(ls /proc/sys/fs/binfmt_misc/ 2>/dev/null | tr '\n' ' ')"
-

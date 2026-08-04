@@ -42,7 +42,7 @@ def _sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
-def _android_cmdline(path: Path) -> str:
+def _android_cmdline(path: Path, *, require_ramdisk: bool = True) -> str:
     data = path.read_bytes()
     if len(data) < 1632 or data[:8] != ANDROID_MAGIC:
         raise ArtifactError(f"{path.name} is not an Android boot image")
@@ -51,8 +51,10 @@ def _android_cmdline(path: Path) -> str:
     ramdisk_size = struct.unpack_from("<I", data, 16)[0]
     if page_size < 512 or page_size & (page_size - 1):
         raise ArtifactError(f"{path.name} has an invalid page size")
-    if kernel_size == 0 or ramdisk_size == 0:
-        raise ArtifactError(f"{path.name} is missing a kernel or ramdisk")
+    if kernel_size == 0:
+        raise ArtifactError(f"{path.name} is missing a kernel")
+    if require_ramdisk and ramdisk_size == 0:
+        raise ArtifactError(f"{path.name} is missing a ramdisk")
     command = data[64:576] + data[608:1632]
     return command.split(b"\0", 1)[0].decode("ascii", errors="strict")
 
@@ -141,7 +143,9 @@ def validate_directory(directory: str | Path) -> dict[str, str]:
             f"boot PARTUUID {boot_root_guid} does not match GPT rootfs {gpt_root_guid}"
         )
 
-    _android_cmdline(root / "lk2nd.img")
+    # lk2nd is distributed as an Android boot container with a kernel payload
+    # and an intentionally empty ramdisk (matching the known-good 3.19 bundle).
+    _android_cmdline(root / "lk2nd.img", require_ramdisk=False)
     if (root / "aboot.mbn").stat().st_size < 64 * 1024:
         raise ArtifactError("aboot.mbn is unexpectedly small")
     if (root / "hyp.mbn").stat().st_size < 4 * 1024:

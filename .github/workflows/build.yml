@@ -6,21 +6,34 @@ on:
     branches: [alpine]
     paths:
       - '.github/workflows/build.yml'
+      - 'build.sh'
+      - 'flash-alpine.*'
       - 'scripts/**'
       - 'configs/**'
+      - 'patches/**'
       - 'prebuilt/**'
       - 'dtbs/**'
       - 'src/**'
-      - 'build.sh'
+      - 'tests/**'
+
+permissions:
+  contents: read
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
 
     steps:
       - uses: actions/checkout@v4
         with:
-          submodules: true
+          submodules: recursive
+
+      - name: Run contract tests
+        run: python3 -m unittest discover -s tests -v
+
+      - name: Check shell syntax
+        run: sh -n build.sh scripts/*.sh
 
       - name: Ensure scripts are executable
         run: chmod +x scripts/*.sh
@@ -40,8 +53,15 @@ jobs:
       - name: Create images
         run: sudo sh -e scripts/build_images.sh
 
+      - name: Validate and package release
+        run: |
+          sudo python3 scripts/validate_artifacts.py files --write-manifest
+          sudo cp flash-alpine.ps1 flash-alpine.bat README.md files/
+
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: ufi003-alpine
           path: files/*
+          if-no-files-found: error
+          retention-days: 14

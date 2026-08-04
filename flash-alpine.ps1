@@ -191,7 +191,11 @@ function Flash-FullFirmware {
     Write-Host "Starting calibration backup in $deviceBackupDirectory" -ForegroundColor Yellow
     Invoke-Fastboot @("erase", "boot") | Out-Null
     Invoke-Fastboot @("flash", "boot", (Get-BundleFile "lk2nd.img")) | Out-Null
-    Restart-FastbootBootloader
+    # A normal reboot executes the temporary lk2nd image from boot. Using
+    # "reboot bootloader" here would stay in lk1st and lose oem dump support.
+    Invoke-Fastboot @("reboot") | Out-Null
+    Start-Sleep -Seconds 2
+    Wait-OneFastbootDevice | Out-Null
 
     try {
         Backup-CalibrationPartitions -DestinationDirectory $deviceBackupDirectory

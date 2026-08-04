@@ -9,8 +9,10 @@ files
 mnt
 rootfs
 apk.static
+__pycache__/
+*.pyc
+backups/
 
 # prebuilt device firmware MUST be committed for CI to build
 !prebuilt/
 !prebuilt/**
-

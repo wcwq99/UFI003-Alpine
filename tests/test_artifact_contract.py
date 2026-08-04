@@ -61,6 +61,14 @@ class ArtifactValidatorTests(unittest.TestCase):
         self.assertEqual(report["rootfs_partition"], "rootfs")
         self.assertEqual(report["root_partuuid"], report["gpt_rootfs_guid"])
 
+    def test_lk2nd_may_use_the_known_good_kernel_only_container(self):
+        lk2nd = self.artifacts / "lk2nd.img"
+        data = bytearray(lk2nd.read_bytes())
+        struct.pack_into("<I", data, 16, 0)
+        lk2nd.write_bytes(data)
+
+        validate_artifacts.validate_directory(self.artifacts)
+
     def test_mismatched_boot_root_partuuid_is_rejected(self):
         boot = self.artifacts / "boot.bin"
         data = boot.read_bytes()

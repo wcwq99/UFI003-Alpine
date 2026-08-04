@@ -47,14 +47,17 @@ class RuntimeContractTests(unittest.TestCase):
 
     def test_destructive_build_directories_are_guarded(self):
         rootfs = (REPO_ROOT / "scripts" / "alpine_rootfs.sh").read_text()
-        networkmanager = (
-            REPO_ROOT / "scripts" / "extract_networkmanager.sh"
-        ).read_text()
 
         self.assertIn("validate_work_dir", rootfs)
         self.assertIn('rm -rf -- "$CHROOT"', rootfs)
-        self.assertIn("validate_work_dir", networkmanager)
-        self.assertIn('rm -rf -- "$BASE"', networkmanager)
+
+    def test_networkmanager_is_not_mixed_across_alpine_releases(self):
+        script = (REPO_ROOT / "scripts" / "alpine_rootfs.sh").read_text()
+
+        self.assertIn("networkmanager-dnsmasq", script)
+        self.assertIn('PROFILE_DIR="$CHROOT/etc/NetworkManager/system-connections"', script)
+        self.assertNotIn("extract_networkmanager.sh", script)
+        self.assertNotIn("$CHROOT/usr/local/etc/NetworkManager", script)
 
 
 if __name__ == "__main__":

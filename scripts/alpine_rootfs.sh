@@ -24,8 +24,8 @@ CHROOT=$(validate_work_dir "${CHROOT:-$ROOT_DIR/rootfs}")
 HOST_NAME=${HOST_NAME:-OpenStick}
 RELEASE=${RELEASE:-v3.24}
 PMOS_RELEASE=${PMOS_RELEASE:-v25.12}
-MIRROR=${MIRROR:-https://mirrors.tuna.tsinghua.edu.cn/alpine}
-PMOS_MIRROR=${PMOS_MIRROR:-https://mirrors.tuna.tsinghua.edu.cn/postmarketOS}
+MIRROR=${MIRROR:-https://dl-cdn.alpinelinux.org/alpine}
+PMOS_MIRROR=${PMOS_MIRROR:-https://mirror.postmarketos.org/postmarketos}
 APK_STATIC_URL=${APK_STATIC_URL:-https://gitlab.alpinelinux.org/api/v4/projects/5/packages/generic/v3.0.6/x86_64/apk.static}
 APK_STATIC_SHA256=${APK_STATIC_SHA256:-f1489e05bace7d7dd0a687fcd38d50b585ac660af4231668b123649bef3718c4}
 DEVICE=${DEVICE:-ufi003}
@@ -79,6 +79,12 @@ apk add \
     iptables \
     iw \
     msm-firmware-loader@pmos \
+    networkmanager \
+    networkmanager-cli \
+    networkmanager-dnsmasq \
+    networkmanager-tui \
+    networkmanager-wifi \
+    networkmanager-wwan \
     openrc \
     rmtfs \
     shadow \
@@ -90,22 +96,14 @@ apk add \
     wireless-regdb
 rm -f /etc/fstab
 command -v fastboot >/dev/null
+command -v NetworkManager >/dev/null
 '
-
-# NetworkManager is isolated under /usr/local because Alpine v3.24 no longer
-# ships the exact package set required by this 5.15-based image.
-sh scripts/extract_networkmanager.sh
 
 chroot "$CHROOT" ash -l -c "
 adduser -D -s /bin/ash '$USER_NAME'
 passwd -l root
 addgroup -S dnsmasq
 adduser -S -D -H -h /dev/null -s /sbin/nologin -G dnsmasq -g dnsmasq dnsmasq
-
-ln /etc/group /usr/local/etc/group
-ln /etc/passwd /usr/local/etc/passwd
-ln /etc/hostname /usr/local/etc/hostname
-ln -sf /usr/local/etc/resolv.conf /etc/resolv.conf
 
 rc-update add devfs sysinit
 rc-update add dmesg sysinit
@@ -130,9 +128,6 @@ rc-update add wpa_supplicant default
 "
 printf '%s:%s\n' "$USER_NAME" "$USER_PASSWORD" | chroot "$CHROOT" chpasswd
 
-for applet in nm-online nmcli nmtui nmtui-connect nmtui-edit nmtui-hostname; do
-    ln -sf /usr/local/bin/chroot.sh "$CHROOT/usr/bin/$applet"
-done
 printf '%s ALL=(ALL:ALL) ALL\n' "$USER_NAME" > "$CHROOT/etc/sudoers.d/$USER_NAME"
 chmod 0440 "$CHROOT/etc/sudoers.d/$USER_NAME"
 
@@ -147,12 +142,12 @@ printf 'ttyMSM0::respawn:/sbin/getty -L 115200 ttyMSM0 vt100\n' >> "$CHROOT/etc/
 printf '%s\n' "$HOST_NAME" > "$CHROOT/etc/hostname"
 sed -i "/localhost/ s/\$/ $HOST_NAME/" "$CHROOT/etc/hosts"
 
-# NetworkManager profiles live inside its isolated /usr/local root.
-PROFILE_DIR="$CHROOT/usr/local/etc/NetworkManager/system-connections"
+# NetworkManager and its profiles come from the same pinned Alpine release as
+# the rest of the rootfs; do not splice in libraries from another release.
+PROFILE_DIR="$CHROOT/etc/NetworkManager/system-connections"
 mkdir -p "$PROFILE_DIR"
 cp configs/*.nmconnection "$PROFILE_DIR/"
 chmod 0600 "$PROFILE_DIR"/*.nmconnection
-ln -s ../usr/local/etc/NetworkManager "$CHROOT/etc/NetworkManager"
 
 cp -a configs/templates "$CHROOT/etc/gt"
 install -m 0755 scripts/setup_ncm_gadget.sh "$CHROOT/usr/local/bin/setup_ncm_gadget.sh"
