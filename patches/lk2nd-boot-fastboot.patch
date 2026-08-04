@@ -1,9 +1,9 @@
 diff --git a/lk2nd/misc.c b/lk2nd/misc.c
 new file mode 100644
-index 0000000..62c5e3d
+index 00000000..042f31f0
 --- /dev/null
 +++ b/lk2nd/misc.c
-@@ -0,0 +1,81 @@
+@@ -0,0 +1,80 @@
 +// SPDX-License-Identifier: BSD-3-Clause
 +/*
 + * Reboot-into-fastboot support for lk1st.
@@ -32,12 +32,15 @@ index 0000000..62c5e3d
 +#define MISC_PARTITION "misc"
 +#define RECOVERY_MESSAGE_COMMAND_SIZE 32
 +#define MISC_COMMAND_PAGE 1
++/* mmc_read/mmc_write require 512-byte aligned transfers and buffers, so read
++ * a whole sector even though only the first 32 bytes carry the command. */
++#define MISC_READ_SIZE 512
 +
 +static void lk2nd_misc_check_fastboot(void)
 +{
 +	int index;
 +	unsigned long long offset;
-+	uint32_t buf[RECOVERY_MESSAGE_COMMAND_SIZE / sizeof(uint32_t)];
++	uint32_t buf[MISC_READ_SIZE / sizeof(uint32_t)];
 +
 +	if (!target_is_emmc_boot())
 +		return;
@@ -67,9 +70,9 @@ index 0000000..62c5e3d
 +		dprintf(INFO, "lk2nd: %s requested, entering fastboot\n",
 +			RECOVERY_CMD);
 +
-+		/* Clear the command so the next boot is normal. mmc_write
-+		 * rounds data_len up to 512 bytes — the extra zeros are
-+		 * harmless padding in the recovery message area. */
++		/* Clear the command so the next boot is normal. The write
++		 * covers the full sector but the command bytes and the
++		 * terminating NULs are what matter. */
 +		memset(buf, 0, sizeof(buf));
 +		if (mmc_write(offset, sizeof(buf), buf)) {
 +			dprintf(CRITICAL,
@@ -82,12 +85,12 @@ index 0000000..62c5e3d
 +}
 +LK2ND_INIT(lk2nd_misc_check_fastboot);
 diff --git a/lk2nd/rules.mk b/lk2nd/rules.mk
-index 4c0209c..4f2f81f 100644
+index 4c0209c9..4f2f81f1 100644
 --- a/lk2nd/rules.mk
 +++ b/lk2nd/rules.mk
 @@ -22,4 +22,5 @@ endif
  $(BUILDDIR)/$(LOCAL_DIR)/%.o: CFLAGS := $(CFLAGS) -Wmissing-prototypes
-
+ 
  OBJS += $(LOCAL_DIR)/init.o
 +OBJS += $(LOCAL_DIR)/misc.o
  include $(LOCAL_DIR)/util/rules.mk

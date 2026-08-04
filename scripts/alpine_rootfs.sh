@@ -29,27 +29,13 @@ PMOS_MIRROR=${PMOS_MIRROR:-https://mirror.postmarketos.org/postmarketos}
 APK_STATIC_URL=${APK_STATIC_URL:-https://gitlab.alpinelinux.org/api/v4/projects/5/packages/generic/v3.0.6/x86_64/apk.static}
 APK_STATIC_SHA256=${APK_STATIC_SHA256:-f1489e05bace7d7dd0a687fcd38d50b585ac660af4231668b123649bef3718c4}
 DEVICE=${DEVICE:-ufi003}
-USER_NAME=${USER_NAME:-user}
-USER_PASSWORD=${USER_PASSWORD:-openstick}
+USER_PASSWORD=${USER_PASSWORD:-password}
 export CHROOT
 
 if [ "$DEVICE" != "ufi003" ]; then
     echo "ERROR: this branch only supports DEVICE=ufi003" >&2
     exit 1
 fi
-case "$USER_NAME" in
-    [a-z_]*) ;;
-    *)
-        echo "ERROR: USER_NAME must start with a lowercase letter or underscore" >&2
-        exit 1
-        ;;
-esac
-case "$USER_NAME" in
-    *[!a-z0-9_-]*)
-        echo "ERROR: USER_NAME contains unsupported characters" >&2
-        exit 1
-        ;;
-esac
 case "$HOST_NAME" in
     [A-Za-z0-9]*) ;;
     *)
@@ -147,12 +133,11 @@ command -v fastboot >/dev/null
 command -v NetworkManager >/dev/null
 '
 
+# root-only setup: root with password for SSH (uses the validated
+# USER_PASSWORD). No regular user account.
+printf 'root:%s\n' "$USER_PASSWORD" | chroot "$CHROOT" chpasswd
+
 chroot "$CHROOT" ash -l -c '
-# root-only setup: no regular user account, root with password for SSH
-echo "root:password" | chpasswd
-# ensure root login is allowed
-
-
 rc-update add devfs sysinit
 rc-update add dmesg sysinit
 rc-update add udev sysinit
@@ -258,18 +243,19 @@ fi
 EOF
 chmod 0755 "$CHROOT/etc/local.d/resize-rootfs.start"
 
-# Restrict SSH to USB interface (usb0) only via iptables.
-# Dropbear listens on 0.0.0.0:22 but iptables blocks all except usb0.
+# Restrict SSH to USB bridge interface (usbbr0) only via iptables.
+# The NCM and RNDIS gadget interfaces are both enslaved to usbbr0 by
+# NetworkManager, so SSH is only reachable through the USB cable.
 cat > "$CHROOT/etc/local.d/ssh-restrict.start" <<'EOF'
 #!/bin/sh
-iptables -A INPUT -p tcp --dport 22 -i usb0 -j ACCEPT
+iptables -A INPUT -p tcp --dport 22 -i usbbr0 -j ACCEPT
 iptables -A INPUT -p tcp --dport 22 -j DROP
 EOF
 chmod 0755 "$CHROOT/etc/local.d/ssh-restrict.start"
 
 cat > "$CHROOT/etc/local.d/ssh-restrict.stop" <<'EOF'
 #!/bin/sh
-iptables -D INPUT -p tcp --dport 22 -i usb0 -j ACCEPT 2>/dev/null || true
+iptables -D INPUT -p tcp --dport 22 -i usbbr0 -j ACCEPT 2>/dev/null || true
 iptables -D INPUT -p tcp --dport 22 -j DROP 2>/dev/null || true
 EOF
 chmod 0755 "$CHROOT/etc/local.d/ssh-restrict.stop"

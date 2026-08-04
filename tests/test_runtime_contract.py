@@ -49,6 +49,15 @@ class RuntimeContractTests(unittest.TestCase):
         self.assertIn("seek=512", script)
         self.assertNotIn("by-partlabel/boot", script)
 
+    def test_boot_fastboot_patch_reads_a_full_sector_into_an_aligned_buffer(self):
+        patch = (REPO_ROOT / "patches" / "lk2nd-boot-fastboot.patch").read_text()
+
+        # The MMC controller requires 512-byte aligned reads/buffers, so the
+        # command buffer must be a whole sector, not just the 32-byte command.
+        self.assertIn("MISC_READ_SIZE 512", patch)
+        self.assertIn("uint32_t buf[MISC_READ_SIZE / sizeof(uint32_t)]", patch)
+        self.assertIn("sizeof(buf)", patch)
+
     def test_rootfs_does_not_ship_shared_keys_or_passwordless_root_console(self):
         script = (REPO_ROOT / "scripts" / "alpine_rootfs.sh").read_text()
 
@@ -61,11 +70,19 @@ class RuntimeContractTests(unittest.TestCase):
     def test_rootfs_build_parameters_cannot_inject_root_shell_commands(self):
         script = (REPO_ROOT / "scripts" / "alpine_rootfs.sh").read_text()
 
-        self.assertIn("USER_NAME contains unsupported characters", script)
         self.assertIn("USER_PASSWORD must contain printable single-line ASCII", script)
         self.assertIn("HOST_NAME is not a valid single-label hostname", script)
-        self.assertIn("echo \"root:password\" | chpasswd", script)
+        self.assertIn("chpasswd", script)
+        self.assertIn('root:%s', script)
         self.assertNotIn("addgroup -S dnsmasq", script)
+
+    def test_rootfs_restricts_ssh_to_usb_bridge(self):
+        script = (REPO_ROOT / "scripts" / "alpine_rootfs.sh").read_text()
+
+        self.assertIn("usbbr0", script)
+        self.assertIn("ssh-restrict.start", script)
+        self.assertIn('--dport 22', script)
+        self.assertIn('-i usbbr0 -j ACCEPT', script)
 
     def test_destructive_build_directories_are_guarded(self):
         rootfs = (REPO_ROOT / "scripts" / "alpine_rootfs.sh").read_text()
