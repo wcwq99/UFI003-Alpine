@@ -25,10 +25,17 @@ fi
 truncate -s 1610612736 rootfs.raw
 mkfs.ext4 -F rootfs.raw
 mkdir -p mnt
-mount -o loop rootfs.raw mnt
-tar xpf alpine_rootfs.tgz -C mnt --exclude='./boot/*' --exclude='./root/*' --exclude='./dev/*'
-
-umount mnt
+# Use fuse2fs if available (works in containers without /dev/loop*),
+# otherwise fall back to a loop mount.
+if command -v fuse2fs >/dev/null 2>&1; then
+    fuse2fs -o fakeroot rootfs.raw mnt
+    tar xpf alpine_rootfs.tgz -C mnt --exclude='./boot/*' --exclude='./root/*' --exclude='./dev/*'
+    umount mnt
+else
+    mount -o loop rootfs.raw mnt
+    tar xpf alpine_rootfs.tgz -C mnt --exclude='./boot/*' --exclude='./root/*' --exclude='./dev/*'
+    umount mnt
+fi
 
 # create sparse android image (fastboot flash -S 200m compatible)
 img2simg rootfs.raw files/alpine_rootfs.bin
