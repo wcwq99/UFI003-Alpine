@@ -1,7 +1,8 @@
 #!/bin/sh
-# Reboot device into fastboot mode by writing "bootloader\n" to the misc
-# partition's boot message field. lk1st reads this on boot and enters
-# fastboot instead of booting the kernel.
+# Reboot device into fastboot mode by writing "boot-fastboot" to the misc
+# partition's boot message command field. The patched lk1st (see
+# src/lk2nd app/aboot/recovery.c) reads this on boot and enters fastboot
+# instead of booting the kernel.
 #
 # Usage: reboot-fastboot
 # After running, device reboots into fastboot (USB PID 0x0308 or similar).
@@ -20,8 +21,9 @@ if [ -z "$MISC_DEV" ]; then
 fi
 echo "misc partition: $MISC_DEV"
 
-# lk1st reads the first 32 bytes of misc as the boot message
-printf 'bootloader\n' | dd of="$MISC_DEV" bs=1 count=32 conv=notrunc 2>/dev/null
+# lk reads the boot message command from the start of misc (struct
+# recovery_message.command, 32 bytes at offset 0).
+printf 'boot-fastboot' | dd of="$MISC_DEV" bs=1 count=32 conv=notrunc 2>/dev/null
 sync
 
 echo "Rebooting into fastboot..."

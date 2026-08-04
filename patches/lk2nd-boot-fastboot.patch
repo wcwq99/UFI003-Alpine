@@ -1,0 +1,32 @@
+diff --git a/app/aboot/recovery.c b/app/aboot/recovery.c
+index b1ad21c..79ca572 100644
+--- a/app/aboot/recovery.c
++++ b/app/aboot/recovery.c
+@@ -423,9 +423,13 @@ int _emmc_recovery_init(void)
+ 		boot_into_recovery = 1;
+ 	}
+ 
+-	if (target_dynamic_partition_supported() &&
+-		!strcmp(msg->command, RECOVERY_BOOT_FASTBOOT_CMD)) {
+-		boot_into_recovery = 1;
++	/* "boot-fastboot" -> enter fastboot mode directly. This is normally only
++	 * honored on devices with dynamic partitions (userspace fastbootd), but
++	 * the UFI003 has no recovery partition and no dynamic partitions, so we
++	 * treat it as a plain "reboot into fastboot" request instead.
++	 */
++	if (!strcmp(msg->command, RECOVERY_BOOT_FASTBOOT_CMD)) {
++		boot_into_fastboot = true;
+ 	}
+ 
+ 	if (!strcmp("update-radio",msg->command))
+diff --git a/app/aboot/recovery.h b/app/aboot/recovery.h
+index 77428e8..d462c4e 100644
+--- a/app/aboot/recovery.h
++++ b/app/aboot/recovery.h
+@@ -122,5 +122,6 @@ int get_ffbm(char *ffbm, unsigned size);
+ VirtualAbMergeStatus GetSnapshotMergeStatus(void);
+ int SetSnapshotMergeStatus (VirtualAbMergeStatus MergeStatus);
+ extern unsigned boot_into_recovery;
++extern bool boot_into_fastboot;
+ 
+ #endif

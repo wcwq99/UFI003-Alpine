@@ -83,9 +83,11 @@ ln /etc/hostname /usr/local/etc
 
 ln -sf /usr/local/etc/resolv.conf /etc
 
-# add symlinks
+# add symlinks (create on the host side so the targets resolve inside the
+# chroot at runtime; /usr/bin on the device is the real filesystem, not a
+# bind mount, so these must exist in the rootfs itself)
 for a in nm-online nmcli nmtui nmtui-connect nmtui-edit nmtui-hostname; do
-    ln -s /usr/local/bin/chroot.sh /usr/bin/${a};
+    ln -sf /usr/local/bin/chroot.sh ${CHROOT}/usr/bin/${a};
 done
 
 rc-update add devfs sysinit
@@ -107,10 +109,8 @@ rc-update add dropbear default
 rc-update add rmtfs default
 rc-update add networkmanager default
 rc-update add networkmanager-dispatcher default
-# adbd OpenRC service comes from the android-tools package; enable it so ADB
-# starts at boot. The setup_ncm_gadget.sh udev rule also starts adbd as a
-# fallback when the USB gadget is configured.
-rc-update add adbd default 2>/dev/null || true
+# NOTE: no adbd service. The USB gadget (NCM/RNDIS) no longer includes an
+# ffs.adb function, so adbd has nothing to attach to (see setup_ncm_gadget.sh).
 rc-update add wpa_supplicant default
 "
 echo 'user ALL=(ALL:ALL) NOPASSWD: ALL' > ${CHROOT}/etc/sudoers.d/user

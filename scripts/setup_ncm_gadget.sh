@@ -2,7 +2,12 @@
 
 # Sets up a composite USB gadget exposing both NCM and RNDIS network interfaces.
 # NCM is preferred by Linux/macOS; RNDIS is needed for older Windows auto-detect.
-# Both share the same usb0 interface and MAC, the host picks whichever it prefers.
+#
+# Notes for the 5.15 "handsomekernel":
+#  - f_rndis exposes the class attribute as "class" (NOT "bInterfaceClass").
+#  - ffs.adb is intentionally NOT used: adbd is not running on this image, and a
+#    linked ffs function without adbd makes the whole gadget fail to bind with
+#    ENODEV (-19). NCM/RNDIS work fine without it.
 
 CONFIGFS="/sys/kernel/config/usb_gadget"
 NAME="openstick"
@@ -15,16 +20,24 @@ RNDIS_HOST_ADDR="2a:85:da:41:eb:fa"
 RNDIS_DEV_ADDR="8a:b1:27:16:8e:a8"
 
 [ -d "${CONFIGFS}" ] || { echo "USB Gadget configfs entry missing!"; exit 1; }
-[ -d "${DIR}" ] && { echo "USB Gadget already configured"; exit 0; }
+
+# clean up a half-configured gadget left by an earlier interrupted run
+if [ -d "${DIR}" ]; then
+    echo "USB Gadget already exists, cleaning up first"
+    echo "" > "${DIR}/UDC" 2>/dev/null || true
+    rm -f "${DIR}/configs/c.1/ncm.1" "${DIR}/configs/c.1/rndis.0" \
+        "${DIR}/configs/c.1/ffs.adb" "${DIR}/os_desc/c.1" 2>/dev/null || true
+    rmdir "${DIR}/functions/ncm.1" "${DIR}/functions/rndis.0" \
+        "${DIR}/functions/ffs.adb" 2>/dev/null || true
+    rmdir "${DIR}/configs/c.1/strings/0x409" "${DIR}/configs/c.1/strings" 2>/dev/null || true
+    rmdir "${DIR}/configs/c.1" 2>/dev/null || true
+    rmdir "${DIR}/strings/0x409" "${DIR}/strings" 2>/dev/null || true
+    rmdir "${DIR}/os_desc" 2>/dev/null || true
+    rmdir "${DIR}" 2>/dev/null || true
+fi
 
 # create gadget entry
-mkdir -p "${DIR}/functions/ncm.1" "${DIR}/functions/rndis.0" "${DIR}/functions/ffs.adb"
-
-# FunctionFS for ADB: adbd will write to /dev/usb-ffs/adb/
-mkdir -p /dev/usb-ffs/adb
-# mount functionfs (will be done by adbd service before exec; this mount is
-# idempotent and safe to retry)
-mount -t functionfs adb /dev/usb-ffs/adb 2>/dev/null || true
+mkdir -p "${DIR}/functions/ncm.1" "${DIR}/functions/rndis.0"
 
 # setup
 echo "0x0200"        > "${DIR}/bcdUSB"          # USB 2.0
@@ -51,7 +64,7 @@ echo "${NCM_DEV_ADDR}"  > "${DIR}/functions/ncm.1/dev_addr"
 echo "${RNDIS_HOST_ADDR}" > "${DIR}/functions/rndis.0/host_addr"
 echo "${RNDIS_DEV_ADDR}"  > "${DIR}/functions/rndis.0/dev_addr"
 # RNDIS uses a different interface class so Windows auto-binds usbnet/rndis
-echo "0xef" > "${DIR}/functions/rndis.0/bInterfaceClass"
+echo "0xef" > "${DIR}/functions/rndis.0/class"
 
 # Enable use of OS descriptors
 # This enables windows 10/11 to auto load drivers
@@ -76,12 +89,19 @@ echo "0xef"   > "${DIR}/bDeviceClass"
 # activate both functions (configfs requires explicit symlink target name)
 ln -s "${DIR}/functions/ncm.1"    "${DIR}/configs/c.1/ncm.1"
 ln -s "${DIR}/functions/rndis.0" "${DIR}/configs/c.1/rndis.0"
-ln -s "${DIR}/functions/ffs.adb" "${DIR}/configs/c.1/ffs.adb"
 ln -s "${DIR}/configs/c.1" "${DIR}/os_desc/c.1"
-echo $(ls /sys/class/udc) > "${DIR}/UDC"
 
-# start adbd (FunctionFS endpoints are now available). Use start-stop-daemon
-# style so re-running this script doesn't double-spawn adbd.
-if [ -x /usr/bin/adbd ] && ! pgrep -x adbd >/dev/null 2>&1; then
-    /usr/bin/adbd
+# bind to UDC with retries (the controller may not be ready right after boot)
+UDC_DEV=$(ls /sys/class/udc 2>/dev/null | head -1)
+if [ -z "$UDC_DEV" ]; then
+    echo "ERROR: no UDC device found" >&2
+    exit 1
 fi
+for i in 1 2 3 4 5; do
+    if echo "${UDC_DEV}" > "${DIR}/UDC" 2>/dev/null; then
+        echo "USB gadget bound to ${UDC_DEV}"
+        break
+    fi
+    echo "retry $i: UDC bind failed, retrying..."
+    sleep 2
+done
