@@ -334,6 +334,7 @@ def normalize_image(path: str | os.PathLike[str]) -> bool:
         or ph.last_usable_lba != last_usable
         or bh.current_lba != backup_lba
         or bh.last_usable_lba != last_usable
+        or bh.entries_lba == 0
     )
     if not needs_fix:
         return False
@@ -348,8 +349,10 @@ def normalize_image(path: str | os.PathLike[str]) -> bool:
     )
 
     # --- backup header ---
+    backup_entries_lba = ph.first_usable_lba
     struct.pack_into("<Q", output, bh.offset + 24, backup_lba)
     struct.pack_into("<Q", output, bh.offset + 48, last_usable)
+    struct.pack_into("<Q", output, bh.offset + 72, backup_entries_lba)
     _update_header_crc(
         output, bh, _crc32(output[image.backup_table_offset : image.backup_table_offset + bh.entry_count * bh.entry_size])
     )

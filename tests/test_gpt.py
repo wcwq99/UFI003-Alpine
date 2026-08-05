@@ -80,6 +80,8 @@ class GptMutationTests(unittest.TestCase):
         self.assertEqual(after.primary_header.last_usable_lba, expected_backup - 1)
         self.assertEqual(after.backup_header.current_lba, expected_backup)
         self.assertEqual(after.backup_header.last_usable_lba, expected_backup - 1)
+        self.assertNotEqual(after.backup_header.entries_lba, 0,
+                            "backup entries_lba must not be zero after normalize")
 
     def test_normalize_is_idempotent(self):
         self.assertTrue(gpt.normalize_image(self.gpt_path))
