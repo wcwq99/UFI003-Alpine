@@ -47,4 +47,5 @@ done
 # preserves all existing LBAs and GUIDs, updates both packed GPT tables, and
 # recalculates the table/header CRCs before replacing the copied image.
 python3 scripts/gpt.py add-misc "$OUTPUT/gpt_both0.bin"
+python3 scripts/gpt.py normalize "$OUTPUT/gpt_both0.bin"
 python3 scripts/gpt.py validate "$OUTPUT/gpt_both0.bin"

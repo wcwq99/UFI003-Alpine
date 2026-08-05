@@ -24,6 +24,7 @@ class BuildContractTests(unittest.TestCase):
         self.assertIn('cp "$PREBUILT/$prebuilt_fw" "$OUTPUT/$prebuilt_fw"', extract)
         self.assertIn('cp "$OUTPUT/aboot.bin" "$OUTPUT/aboot.mbn"', extract)
         self.assertIn("scripts/gpt.py add-misc", extract)
+        self.assertIn("scripts/gpt.py normalize", extract)
 
 
 class ArtifactValidatorTests(unittest.TestCase):

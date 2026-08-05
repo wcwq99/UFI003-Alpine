@@ -64,6 +64,29 @@ class GptMutationTests(unittest.TestCase):
         with self.assertRaisesRegex(gpt.GptError, "partition table CRC"):
             gpt.read_image(self.gpt_path)
 
+    def test_normalize_fixes_backup_lba_and_last_usable(self):
+        before = gpt.read_image(self.gpt_path)
+        self.assertEqual(before.primary_header.backup_lba, 0,
+                         "fixture should have zero backup_lba (fastboot format)")
+        self.assertEqual(before.primary_header.last_usable_lba, 0,
+                         "fixture should have zero last_usable")
+
+        changed = gpt.normalize_image(self.gpt_path)
+        self.assertTrue(changed, "normalize should report a change")
+
+        after = gpt.read_image(self.gpt_path)
+        expected_backup = after.backup_header.offset // gpt.LBA_SIZE
+        self.assertEqual(after.primary_header.backup_lba, expected_backup)
+        self.assertEqual(after.primary_header.last_usable_lba, expected_backup - 1)
+        self.assertEqual(after.backup_header.current_lba, expected_backup)
+        self.assertEqual(after.backup_header.last_usable_lba, expected_backup - 1)
+
+    def test_normalize_is_idempotent(self):
+        self.assertTrue(gpt.normalize_image(self.gpt_path))
+        first = self.gpt_path.read_bytes()
+        self.assertFalse(gpt.normalize_image(self.gpt_path))
+        self.assertEqual(self.gpt_path.read_bytes(), first)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -311,10 +311,73 @@ def add_misc_partition(
     return True
 
 
+def normalize_image(path: str | os.PathLike[str]) -> bool:
+    """Fix backup_lba, current_lba, and last_usable in both GPT headers.
+
+    The Qualcomm fastboot gpt_both0.bin format uses zero placeholder values
+    for backup_lba, current_lba, and last_usable.  When the image is written
+    directly to disk (e.g. 9006 passthrough or emmcdl), the PBL sees these
+    zeros and treats the backup GPT as missing, then falls back to a stale
+    backup at an unrelated sector.  This function sets every field to a
+    self-consistent value that works for direct raw-disk deployment.
+    """
+    image = read_image(path)
+    ph = image.primary_header
+    bh = image.backup_header
+
+    # The backup header lives in the last sector of the 67-sector bundle.
+    backup_lba = bh.offset // LBA_SIZE
+    last_usable = backup_lba - 1
+
+    needs_fix = (
+        ph.backup_lba != backup_lba
+        or ph.last_usable_lba != last_usable
+        or bh.current_lba != backup_lba
+        or bh.last_usable_lba != last_usable
+    )
+    if not needs_fix:
+        return False
+
+    output = bytearray(image.data)
+
+    # --- primary header ---
+    struct.pack_into("<Q", output, ph.offset + 32, backup_lba)
+    struct.pack_into("<Q", output, ph.offset + 48, last_usable)
+    _update_header_crc(
+        output, ph, _crc32(output[image.primary_table_offset : image.primary_table_offset + ph.entry_count * ph.entry_size])
+    )
+
+    # --- backup header ---
+    struct.pack_into("<Q", output, bh.offset + 24, backup_lba)
+    struct.pack_into("<Q", output, bh.offset + 48, last_usable)
+    _update_header_crc(
+        output, bh, _crc32(output[image.backup_table_offset : image.backup_table_offset + bh.entry_count * bh.entry_size])
+    )
+
+    _parse_image(bytes(output))
+
+    mode = Path(path).stat().st_mode
+    temp_name = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="wb", prefix=f".{Path(path).name}.", dir=Path(path).parent, delete=False
+        ) as temp_file:
+            temp_name = temp_file.name
+            temp_file.write(output)
+            temp_file.flush()
+            os.fsync(temp_file.fileno())
+        os.chmod(temp_name, mode)
+        os.replace(temp_name, path)
+    finally:
+        if temp_name and os.path.exists(temp_name):
+            os.unlink(temp_name)
+    return True
+
+
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     subparsers = parser.add_subparsers(dest="command", required=True)
-    for command in ("validate", "add-misc"):
+    for command in ("validate", "add-misc", "normalize"):
         command_parser = subparsers.add_parser(command)
         command_parser.add_argument("image", type=Path)
     return parser
@@ -325,6 +388,11 @@ def main() -> int:
     if args.command == "validate":
         image = read_image(args.image)
         print(f"valid GPT bundle: {len(image.partitions)} partitions")
+        return 0
+    if args.command == "normalize":
+        changed = normalize_image(args.image)
+        state = "normalized" if changed else "already consistent"
+        print(f"GPT headers: {state}")
         return 0
     changed = add_misc_partition(args.image)
     state = "added" if changed else "already present"
