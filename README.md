@@ -124,14 +124,14 @@ edl reset
 | USB 地址 | `192.168.5.1/24` |
 | SSH | `ssh root@192.168.5.1` |
 | SSH 安全 | iptables 限制 SSH 仅通过 USB 接口（usb0）访问 |
-| Wi-Fi 热点 | 配置已预置，但默认不自动开启 |
+| Wi-Fi 热点 | 默认开启，SSID `Openstick`，密码 `12345678`，地址 `192.168.4.1/24` |
 
 USB gadget 同时创建 NCM 与 RNDIS，以兼容 Linux/macOS 和 Windows；NetworkManager 将两个接口加入同一个 `usbbr0`，只由桥持有地址和共享/NAT 配置。
 
-首次登录后立即运行 `passwd` 更改默认密码。需要 Wi-Fi 热点时，先设置新的 WPA 密码再启用：
+首次登录后立即运行 `passwd` 更改默认密码。Wi-Fi 热点默认开启，SSID `Openstick`，密码 `12345678`。如需修改 Wi-Fi 密码：
 
 ```sh
-sudo nmcli connection modify hotspot wifi-sec.psk '新的强密码' connection.autoconnect yes
+sudo nmcli connection modify hotspot wifi-sec.psk '新的强密码'
 sudo nmcli connection up hotspot
 ```
 
@@ -148,6 +148,7 @@ fastboot --version
 ip address show usbbr0
 rc-service openstick-usb status
 rc-service networkmanager status
+nmcli connection show hotspot
 
 # 验证下一次启动进入 bootloader fastboot
 sudo reboot-fastboot
