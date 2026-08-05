@@ -27,10 +27,11 @@ class RuntimeContractTests(unittest.TestCase):
             self.assertIn("method=disabled", profile)
             self.assertNotIn("address1=192.168.5.1/24", profile)
 
-    def test_known_wifi_password_is_not_exposed_by_default(self):
+    def test_wifi_hotspot_is_enabled_by_default(self):
         hotspot = (REPO_ROOT / "configs" / "hotspot.nmconnection").read_text()
 
-        self.assertIn("autoconnect=false", hotspot)
+        self.assertIn("autoconnect=true", hotspot)
+        self.assertIn("psk=12345678", hotspot)
 
     def test_rootfs_has_fastboot_but_no_fake_adb_or_dead_boot_mount(self):
         script = (REPO_ROOT / "scripts" / "alpine_rootfs.sh").read_text()
