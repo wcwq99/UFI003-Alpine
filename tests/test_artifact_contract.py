@@ -12,14 +12,17 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
 class BuildContractTests(unittest.TestCase):
-    def test_generated_bootloader_is_not_overwritten(self):
+    def test_prebuilt_bootloader_is_used_without_overwriting_generated_outputs(self):
         build = (REPO_ROOT / "scripts" / "build_hyp_aboot.sh").read_text()
         extract = (REPO_ROOT / "scripts" / "extract_fw.sh").read_text()
 
         self.assertIn("files/aboot.mbn", build)
         self.assertIn("files/lk2nd.img", build)
         self.assertIn("lk2nd-msm8916", build)
-        self.assertNotIn("aboot.bin hyp.mbn", extract)
+        # extract_fw.sh now publishes prebuilt aboot.bin as aboot.mbn
+        # because the compiled version is incompatible with UFI003_MB hardware.
+        self.assertIn('cp "$PREBUILT/$prebuilt_fw" "$OUTPUT/$prebuilt_fw"', extract)
+        self.assertIn('cp "$OUTPUT/aboot.bin" "$OUTPUT/aboot.mbn"', extract)
         self.assertIn("scripts/gpt.py add-misc", extract)
 
 
